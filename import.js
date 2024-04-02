@@ -1,7 +1,7 @@
 const csv = require("csv");
 const fs = require("fs");
 
-const { createIssue } = require("./helpers.js");
+const { createIssue, updateIssue } = require("./helpers.js");
 
 const importFile = (octokit, file, values) => {
   fs.readFile(file, "utf8", (err, data) => {
@@ -26,50 +26,65 @@ const importFile = (octokit, file, values) => {
         const bodyIndex = cols.indexOf("body");
         const labelsIndex = cols.indexOf("labels");
         const milestoneIndex = cols.indexOf("milestone");
-        const assigneeIndex = cols.indexOf("assignee");
+        const assigneesIndex = cols.indexOf("assignees");
         const stateIndex = cols.indexOf("state");
 
         if (titleIndex === -1) {
           console.error("Title required by GitHub, but not found in CSV.");
           process.exit(1);
         }
-        const createPromises = csvRows.map((row) => {
+        const createPromises = csvRows.reduce((pr, row) => {
           const sendObj = {
-            issue: {},
+            owner: values.userOrOrganization,
+            repo: values.repo,
+            title: row[titleIndex],
+            headers: {
+              'X-GitHub-Api-Version': '2022-11-28',
+            },
           };
-
-          sendObj.issue.title = row[titleIndex];
 
           // if we have a body column, pass that.
           if (bodyIndex > -1 && row[bodyIndex] !== "") {
-            sendObj.issue.body = row[bodyIndex];
+            sendObj.body = row[bodyIndex];
           }
 
           // if we have a labels column, pass that.
           if (labelsIndex > -1 && row[labelsIndex] !== "") {
-            sendObj.issue.labels = row[labelsIndex].split(",");
+            sendObj.labels = row[labelsIndex].split(",");
           }
 
           // if we have a milestone column, pass that.
           if (milestoneIndex > -1 && row[milestoneIndex] !== "") {
-            sendObj.issue.milestone = Number(row[milestoneIndex]);
+            sendObj.milestone = Number(row[milestoneIndex]);
           }
 
           // if we have an assignee column, pass that.
-          if (assigneeIndex > -1 && row[assigneeIndex] !== "") {
-            sendObj.issue.assignee = row[assigneeIndex];
+          if (assigneesIndex > -1 && row[assigneesIndex] !== "") {
+            sendObj.assignees = row[assigneesIndex].split(",");
           }
 
-          if (stateIndex > -1 && row[stateIndex].toLowerCase() === "closed") {
-            sendObj.issue.closed = true;
-          }
-          return createIssue(
+          const promise = createIssue(
             octokit,
             sendObj,
             values.userOrOrganization,
             values.repo
           );
-        });
+          if (stateIndex > -1 && row[stateIndex].toLowerCase() === "closed") {
+            sendObj.state = 'closed';
+
+            pr.push(promise.then((res) => {
+              return updateIssue(
+                octokit,
+                sendObj,
+                values.userOrOrganization,
+                values.repo,
+                res.data.number);
+              }));
+          } else {
+            pr.push(promise);
+          }
+          return pr;
+        }, []);
 
         Promise.all(createPromises).then(
           (res) => {
