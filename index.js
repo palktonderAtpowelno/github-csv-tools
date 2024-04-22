@@ -7,6 +7,7 @@ const prompt = require("co-prompt");
 const { Octokit } = require("@octokit/rest");
 const { throttling } = require("@octokit/plugin-throttling");
 const { importFile } = require("./import.js");
+const { importCommentsFile } = require("./import-comments.js");
 const { exportIssues } = require("./export.js");
 
 program
@@ -38,7 +39,13 @@ program
   .option(
     "--csvDelimiter [csvDelimiter]",
     "CSV delimiter character (defaults to ',')"
-  )  .option("-v, --verbose", "Include additional logging information.")
+  )
+  .option("--comments", "Import issue comments.")
+  .option(
+    "--output [output]",
+    "The name of the CSV you'd like to output the import results to."
+  )
+  .option("-v, --verbose", "Include additional logging information.")
   .action(function (file, options) {
     co(function* () {
       const retObject = {};
@@ -71,6 +78,12 @@ program
       if (retObject.repo === "") {
         retObject.repo = yield prompt("Repository: ");
       }
+      if (options.comments) {
+        retObject.comments = true;
+      }
+      if (options.output) {
+        retObject.output = options.output;
+      }
       return retObject;
     }).then(
       function (values) {
@@ -102,7 +115,13 @@ program
 
         if (file) {
           // This is an import!
-          importFile(octokit, file, values);
+          if (values.comments) {
+            // import comments
+            importCommentsFile(octokit, file, values);
+          } else {
+            // import issues
+            importFile(octokit, file, values);
+          }
         } else {
           // this is an export!
           exportIssues(octokit, values);

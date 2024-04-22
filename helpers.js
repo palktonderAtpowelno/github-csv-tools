@@ -48,4 +48,29 @@ const updateIssue = (octokit, issueInfo, organization, repository, number) => {
   });
 };
 
-module.exports = { createIssue, updateIssue };
+const createIssueComment = (octokit, issueCommentInfo, organization, repository, number) => {
+  return new Promise((resolve, reject) => {
+    octokit
+      .request(
+        "POST /repos/" + organization + "/" + repository + "/issues/" + number + "/comments",
+        issueCommentInfo
+      )
+      .then(
+        (res) => {
+          // console.log("res", res);
+          if (res.status === 201) {
+            console.log(`Imported issue comment for issue: ${number}`);
+            resolve(res);
+          } else {
+            // error creating the issue
+            reject(res);
+          }
+        },
+        (err) => {
+          reject(err);
+        }
+      );
+  });
+};
+
+module.exports = { createIssue, updateIssue, createIssueComment };
